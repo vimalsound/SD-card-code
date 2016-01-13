@@ -1,0 +1,130 @@
+
+#include "GlobalDefs.h"
+#include "HardwarePlatform.h"
+#include "AppConditionals.h"
+#include "HalMcu.h"
+#include "HalIsr.h"
+#include "OsTask.h"
+#include "Timer.h"
+#include "AppDefs.h"
+#include "IoDefs.h"
+#include "ff.h"
+#include "MMC.h"
+
+
+
+
+U8 check = 1;
+
+extern FATFS fil_obj;
+        
+extern FIL fp;
+
+char buffer[100];
+unsigned int bw;
+BYTE len;
+
+int i = 0;
+
+U8 data = 0;
+
+void main(void)
+{
+        P5DIR |= BIT5;  
+        P11DIR |= BIT0 + BIT1 + BIT2;
+        P8DIR |= BIT5 + BIT6 + BIT7;
+        ///*stopping WDT allowing it not to expire*/
+  	vWdtStop();
+        
+        SFRRPCR |= SYSNMI;//Mapping reset to NMI
+        
+        /*Initializing the watch dog timer to be reset at 250ms*/
+        //vWdtInit()
+	
+	/*MCLK = SMCLK = XT2 @ 6 MHz*/
+	 vClockInit();
+        
+   //     fnHalIsrCallBackInit();	
+	
+	/*OS Init*/
+	// OsInit();
+
+	/*Sw timer Init*/
+	//vSwTimerInit();
+	
+	/*Creating the APP_TASK...The OS supports dynamic task 
+	creation*/
+	//nOsCreateTask(vAppTaskEntry,APP_TASK,PRIORITY_APP_TASK);
+        
+        /*Creating the PARALLEL_TASK.....*/
+   //     nOsCreateTask(vParallelTask,PARALLEL_TASK,PRIORITY_PARALLEL_TASK);
+
+	/*Since few of the peripherals such as timer are inited previouldy aloing with all
+	other peripheral inits, it should be allowed to expire and serve the ISR immediately
+	and moved before the app init itself...think of the case if app init consumes more time*/
+	__enable_interrupt();
+        
+        //__delay_cycles(CRYSTAL_FREQUENCY);
+	
+	/*This is the default init fn for a task*/
+	//fvAppTaskInit();
+	
+	//__enable_interrupt();
+
+	/*calling OS scheduler, thereby the control will be taken care
+	by the OS*/
+	//vOsScheduler();
+        
+        vUart0Init();
+         
+        check = EnInitMemory();
+       
+        while(1)
+        {
+          
+              data =  buffer[i++];
+              len = sizeof(buffer);
+          
+         
+              
+             vSendByte(UART0_ID, data);
+            
+         //   vSendData(buffer[i], 8, UART0_ID);
+          
+             P5OUT ^= BIT5;
+             for(U32 i=0; i<200000; i++);
+          
+        
+          
+          if(check == 0)
+          {
+            check = f_mount(&fil_obj," ", 1);
+            if(check == 0)
+            {
+               check = f_open(&fp,"33.txt",FA_WRITE | FA_READ | FA_OPEN_ALWAYS);
+              if(!check)
+              {
+                  
+              }
+             if(f_lseek(&fp,f_size(&fp)) == FR_OK)
+             {
+                 f_write(&fp,buffer,len,&bw);
+             }
+             
+              P5OUT ^= BIT5;
+              for(U32 i=0; i<200000; i++);
+             
+            }
+            f_close(&fp);
+          }
+        }       
+}
+
+
+
+void uartisr(U8 value)
+{ 
+   P11OUT ^= BIT0 + BIT1 + BIT2;
+   P8OUT ^= BIT5 + BIT6 + BIT7;
+   buffer[i++] = value;   
+}   
